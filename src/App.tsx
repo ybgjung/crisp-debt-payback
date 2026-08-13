@@ -1,122 +1,119 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useRef, useState } from 'react';
+import type { AppState, Debt, StatementRecord } from './types';
+import { emptyState, sampleState } from './lib/storage';
+import { useSync } from './lib/sync';
+import Dashboard from './components/Dashboard';
+import DebtList from './components/DebtList';
+import PlanView from './components/PlanView';
+import ImportView from './components/ImportView';
+import CloudBar, { CloudStatus } from './components/CloudBar';
 
-function App() {
-  const [count, setCount] = useState(0)
+type Tab = 'dashboard' | 'debts' | 'plan' | 'import';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'debts', label: 'Debts' },
+  { id: 'plan', label: 'Payoff plan' },
+  { id: 'import', label: 'Import' },
+];
+
+export default function App() {
+  const sync = useSync();
+  const state = sync.state;
+  const [tab, setTab] = useState<Tab>('dashboard');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const setDebts = (debts: Debt[]) => sync.update((s) => ({ ...s, debts }));
+  const setSettings = (patch: Partial<AppState['settings']>) =>
+    sync.update((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+
+  const applyImport = (debts: Debt[], statement: StatementRecord) =>
+    sync.update((s) => ({ ...s, debts, statements: [...s.statements, statement] }));
+
+  function exportJson() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debt-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importJson(file: File) {
+    try {
+      const parsed = JSON.parse(await file.text()) as AppState;
+      if (!Array.isArray(parsed.debts)) throw new Error();
+      sync.replace({ ...emptyState(), ...parsed });
+    } catch {
+      alert('That file is not a valid backup.');
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app">
+      <div className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            Debt tracker
+            <span>{sync.email ?? 'everything stays on this device'}</span>
+          </div>
+          <div className="tabs">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                className={`tab${tab === t.id ? ' active' : ''}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </div>
 
-      <div className="ticks"></div>
+      <CloudBar sync={sync} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      {tab === 'dashboard' && <Dashboard state={state} />}
+      {tab === 'debts' && <DebtList debts={state.debts} onChange={setDebts} />}
+      {tab === 'plan' && <PlanView state={state} onSettings={setSettings} />}
+      {tab === 'import' && <ImportView state={state} onApply={applyImport} />}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <div className="hr" />
+      <div className="split" style={{ justifyContent: 'space-between' }}>
+        <span className="split muted tiny">
+          <CloudStatus sync={sync} />
+          {sync.cloudEnabled && sync.email
+            ? `Signed in as ${sync.email}`
+            : 'Saved in this browser only. Export a backup before clearing site data.'}
+        </span>
+        <div className="split">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])}
+          />
+          {!state.debts.length && (
+            <button className="btn btn-sm" onClick={() => sync.replace(sampleState())}>
+              Load sample data
+            </button>
+          )}
+          <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
+            Restore backup
+          </button>
+          <button className="btn btn-sm" onClick={exportJson}>
+            Export backup
+          </button>
+          {sync.email && (
+            <button className="btn btn-sm" onClick={() => void sync.signOut()}>
+              Sign out
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
-
-export default App
