@@ -89,8 +89,29 @@ export interface StatementRecord {
   importedAt: string;
 }
 
+export type BudgetItemType = 'income' | 'fixed' | 'variable';
+
+export interface BudgetItem {
+  id: string;
+  name: string;
+  amount: number;
+  type: BudgetItemType;
+  frequency: 'monthly' | 'biweekly';
+}
+
+/** A real payment actually made, distinct from the forward-looking simulator. */
+export interface PaymentLogEntry {
+  id: string;
+  debtId: string;
+  amount: number;
+  date: ISODate;
+  note?: string;
+}
+
 export interface AppState {
   debts: Debt[];
   settings: Settings;
   statements: StatementRecord[];
+  budgetItems: BudgetItem[];
+  payments: PaymentLogEntry[];
 }

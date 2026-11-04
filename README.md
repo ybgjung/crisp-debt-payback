@@ -11,7 +11,7 @@ Without Supabase credentials it runs local-only, storing everything in `localSto
 
 ## Connecting Supabase
 
-**1. Apply the schema.** Open your project's SQL editor and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Or, with the CLI:
+**1. Apply the schema.** Open your project's SQL editor and run the files in [`supabase/migrations/`](supabase/migrations/) in order. Or, with the CLI:
 
 ```bash
 supabase link --project-ref YOUR_PROJECT_REF && supabase db push
@@ -37,6 +37,8 @@ Then sign in from the banner in the app. Your rows are scoped to your user id.
 | `debts` | Cards and loans, with the columns each kind needs (enforced by check constraints) |
 | `card_buckets` | One row per distinct rate on a card — purchases, 0% transfer, flex plan |
 | `statements` | Imported statement history, kept as JSONB since issuer files vary |
+| `budget_items` | Income/fixed/variable lines that net out to what's actually left for debt |
+| `payments` | A log of payments you actually made, separate from the forward-looking plan |
 
 Writes go through a `save_state(payload jsonb)` function that replaces your state in a single transaction — a partial write would leave balances and buckets disagreeing. It runs `security invoker`, so row-level security stays in force and it can only touch your own rows.
 
@@ -67,6 +69,10 @@ Loans track APR, payment frequency (including biweekly, which is 26 payments a y
 | Deadline-aware | Avalanche, but jumps to promo balances near expiry | Avoiding rate jumps and deferred-interest traps |
 
 **Statement import.** Drop in a CSV transaction export or a PDF statement. The parser detects sign conventions, separates interest and fees from purchases, extracts APRs and the new balance, and shows a review screen. Nothing changes until you confirm the number — and you can edit it before applying.
+
+**Budget breakdown.** List income and fixed/variable expenses and the app nets out what's honestly left for debt, separate from whatever the payoff plan's budget field happens to be set to — with a one-click button to sync the two when they drift apart.
+
+**Payoff milestones.** Log real payments as you make them (separate from the simulator, which only projects forward) and the dashboard tracks lifetime progress against a simple badge ladder, plus how far to the next one.
 
 ## Notes
 

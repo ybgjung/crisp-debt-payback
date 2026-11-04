@@ -9,6 +9,8 @@ export function emptyState(): AppState {
     debts: [],
     settings: { monthlyBudget: 1000, startDate: todayISO(), strategy: 'avalanche' },
     statements: [],
+    budgetItems: [],
+    payments: [],
   };
 }
 
@@ -159,6 +161,18 @@ export function sampleState(): AppState {
       informal: true,
       notes: 'No interest — paying back every other Friday.',
     },
+  ];
+  state.budgetItems = [
+    { id: uid(), name: 'Paycheck', amount: 4200, type: 'income', frequency: 'monthly' },
+    { id: uid(), name: 'Rent', amount: 1600, type: 'fixed', frequency: 'monthly' },
+    { id: uid(), name: 'Utilities', amount: 180, type: 'fixed', frequency: 'monthly' },
+    { id: uid(), name: 'Groceries', amount: 450, type: 'variable', frequency: 'monthly' },
+    { id: uid(), name: 'Transport', amount: 120, type: 'variable', frequency: 'monthly' },
+  ];
+  state.payments = [
+    { id: uid(), debtId: state.debts[0].id, amount: 400, date: '2026-07-03', note: 'Statement payment' },
+    { id: uid(), debtId: state.debts[2].id, amount: 250, date: '2026-07-17' },
+    { id: uid(), debtId: state.debts[3].id, amount: 285, date: '2026-08-01' },
   ];
   return state;
 }

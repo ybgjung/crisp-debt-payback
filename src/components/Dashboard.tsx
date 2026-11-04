@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
-import type { AppState } from '../types';
+import { useMemo, useState } from 'react';
+import type { AppState, PaymentLogEntry } from '../types';
 import { advancePayment, cardInsight, simulate } from '../lib/engine';
 import { addDays, formatDate, formatMonth, parseISO, toISO, todayISO } from '../lib/dates';
-import { duration, ordinal, usd, usdAuto } from '../lib/format';
-import { Pill, Stat } from './ui';
+import { duration, ordinal, parseNumber, uid, usd, usdAuto } from '../lib/format';
+import { MILESTONES, milestonesReached, nextMilestone } from '../lib/budget';
+import { Field, Pill, Select, Stat } from './ui';
 import { debtBalanceOf } from '../lib/debt';
 
 interface Upcoming {
@@ -13,8 +14,19 @@ interface Upcoming {
   kind: string;
 }
 
-export default function Dashboard({ state }: { state: AppState }) {
+export default function Dashboard({
+  state,
+  onLogPayment,
+}: {
+  state: AppState;
+  onLogPayment: (entry: PaymentLogEntry) => void;
+}) {
   const { debts, settings } = state;
+
+  const totalPaid = useMemo(
+    () => state.payments.reduce((s, p) => s + p.amount, 0),
+    [state.payments],
+  );
 
   const totals = useMemo(() => {
     let balance = 0;
@@ -151,6 +163,11 @@ export default function Dashboard({ state }: { state: AppState }) {
         </div>
       </div>
 
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))' }}>
+        <MilestonesCard totalPaid={totalPaid} />
+        <PaymentLogCard state={state} onLogPayment={onLogPayment} />
+      </div>
+
       {promos.length > 0 && (
         <div className="section">
           <div className="section-head">
@@ -268,6 +285,119 @@ export default function Dashboard({ state }: { state: AppState }) {
             </table>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MilestonesCard({ totalPaid }: { totalPaid: number }) {
+  const reached = milestonesReached(totalPaid);
+  const next = nextMilestone(totalPaid);
+
+  return (
+    <div className="section">
+      <div className="section-head">
+        <div>
+          <h2>Milestones</h2>
+          <p>{usd(totalPaid)} logged toward debt, all time.</p>
+        </div>
+      </div>
+      <div className="card card-pad">
+        <div className="split" style={{ flexWrap: 'wrap', gap: 10 }}>
+          {MILESTONES.map((m) => {
+            const hit = reached.includes(m);
+            return (
+              <div
+                key={m.label}
+                className="stat"
+                style={{ opacity: hit ? 1 : 0.4, minWidth: 110 }}
+              >
+                <div style={{ fontSize: 22 }}>{m.icon}</div>
+                <div className="stat-sub">{m.label}</div>
+              </div>
+            );
+          })}
+        </div>
+        {next && (
+          <div className="muted tiny" style={{ marginTop: 10 }}>
+            {usd(next.remaining)} more to {next.milestone.label.toLowerCase()}.
+          </div>
+        )}
+        {!next && (
+          <div className="muted tiny" style={{ marginTop: 10 }}>
+            Every milestone reached.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PaymentLogCard({
+  state,
+  onLogPayment,
+}: {
+  state: AppState;
+  onLogPayment: (entry: PaymentLogEntry) => void;
+}) {
+  const { debts, payments } = state;
+  const [debtId, setDebtId] = useState(debts[0]?.id ?? '');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const recent = [...payments].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  const submit = () => {
+    const value = Math.round(parseNumber(amount) * 100) / 100;
+    if (!debtId || value <= 0) return;
+    onLogPayment({ id: uid(), debtId, amount: value, date });
+    setAmount('');
+  };
+
+  if (!debts.length) return null;
+
+  return (
+    <div className="section">
+      <div className="section-head">
+        <div>
+          <h2>Log a payment</h2>
+          <p>An actual payment you made — separate from the plan's projection.</p>
+        </div>
+      </div>
+      <div className="card card-pad">
+        <div className="field-row" style={{ marginBottom: 10 }}>
+          <Select
+            label="Account"
+            value={debtId}
+            onChange={setDebtId}
+            options={debts.map((d) => ({ value: d.id, label: d.name }))}
+          />
+          <Field label="Amount" prefix="$" value={amount} onChange={setAmount} />
+          <Field label="Date" type="date" value={date} onChange={setDate} />
+        </div>
+        <button className="btn btn-sm btn-primary" onClick={submit}>
+          Add payment
+        </button>
+
+        {recent.length > 0 && (
+          <>
+            <div className="hr" />
+            <div className="table-wrap">
+              <table>
+                <tbody>
+                  {recent.map((p) => (
+                    <tr key={p.id}>
+                      <td className="tiny">{formatDate(p.date)}</td>
+                      <td>{debts.find((d) => d.id === p.debtId)?.name ?? '(deleted)'}</td>
+                      <td className="right" style={{ color: 'var(--good)' }}>
+                        {usd(p.amount, true)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

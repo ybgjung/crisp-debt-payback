@@ -1,19 +1,21 @@
 import { useRef, useState } from 'react';
-import type { AppState, Debt, StatementRecord } from './types';
+import type { AppState, BudgetItem, Debt, PaymentLogEntry, StatementRecord } from './types';
 import { emptyState, sampleState } from './lib/storage';
 import { useSync } from './lib/sync';
 import Dashboard from './components/Dashboard';
 import DebtList from './components/DebtList';
 import PlanView from './components/PlanView';
 import ImportView from './components/ImportView';
+import BudgetView from './components/BudgetView';
 import CloudBar, { CloudStatus } from './components/CloudBar';
 
-type Tab = 'dashboard' | 'debts' | 'plan' | 'import';
+type Tab = 'dashboard' | 'debts' | 'plan' | 'budget' | 'import';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'debts', label: 'Debts' },
   { id: 'plan', label: 'Payoff plan' },
+  { id: 'budget', label: 'Budget' },
   { id: 'import', label: 'Import' },
 ];
 
@@ -29,6 +31,12 @@ export default function App() {
 
   const applyImport = (debts: Debt[], statement: StatementRecord) =>
     sync.update((s) => ({ ...s, debts, statements: [...s.statements, statement] }));
+
+  const setBudgetItems = (budgetItems: BudgetItem[]) =>
+    sync.update((s) => ({ ...s, budgetItems }));
+
+  const logPayment = (entry: PaymentLogEntry) =>
+    sync.update((s) => ({ ...s, payments: [...s.payments, entry] }));
 
   function exportJson() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -75,9 +83,12 @@ export default function App() {
 
       <CloudBar sync={sync} />
 
-      {tab === 'dashboard' && <Dashboard state={state} />}
+      {tab === 'dashboard' && <Dashboard state={state} onLogPayment={logPayment} />}
       {tab === 'debts' && <DebtList debts={state.debts} onChange={setDebts} />}
       {tab === 'plan' && <PlanView state={state} onSettings={setSettings} />}
+      {tab === 'budget' && (
+        <BudgetView state={state} onChange={setBudgetItems} onSettings={setSettings} />
+      )}
       {tab === 'import' && <ImportView state={state} onApply={applyImport} />}
 
       <div className="hr" />

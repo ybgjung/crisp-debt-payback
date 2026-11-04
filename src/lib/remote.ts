@@ -1,4 +1,13 @@
-import type { AppState, Bucket, CreditCard, Debt, Loan, StatementRecord } from '../types';
+import type {
+  AppState,
+  BudgetItem,
+  Bucket,
+  CreditCard,
+  Debt,
+  Loan,
+  PaymentLogEntry,
+  StatementRecord,
+} from '../types';
 import { emptyState } from './storage';
 import { supabase } from './supabase';
 
@@ -23,6 +32,22 @@ interface DebtRow {
   payment_amount: string | number | null;
   next_payment_date: string | null;
   informal: boolean | null;
+}
+
+interface BudgetItemRow {
+  id: string;
+  name: string;
+  amount: string | number;
+  type: BudgetItem['type'];
+  frequency: BudgetItem['frequency'];
+}
+
+interface PaymentRow {
+  id: string;
+  debt_id: string | null;
+  amount: string | number;
+  date: string;
+  note: string | null;
 }
 
 interface BucketRow {
@@ -114,19 +139,24 @@ function toDebt(r: DebtRow, buckets: BucketRow[]): Debt {
 export async function loadRemote(): Promise<AppState | null> {
   if (!supabase) throw new Error('Supabase is not configured.');
 
-  const [settingsRes, debtsRes, bucketsRes, statementsRes] = await Promise.all([
-    supabase.from('settings').select('*').maybeSingle(),
-    supabase.from('debts').select('*').order('position'),
-    supabase.from('card_buckets').select('*').order('position'),
-    supabase.from('statements').select('data').order('close_date', { ascending: false }),
-  ]);
+  const [settingsRes, debtsRes, bucketsRes, statementsRes, budgetItemsRes, paymentsRes] =
+    await Promise.all([
+      supabase.from('settings').select('*').maybeSingle(),
+      supabase.from('debts').select('*').order('position'),
+      supabase.from('card_buckets').select('*').order('position'),
+      supabase.from('statements').select('data').order('close_date', { ascending: false }),
+      supabase.from('budget_items').select('*').order('position'),
+      supabase.from('payments').select('*').order('date', { ascending: false }),
+    ]);
 
-  for (const res of [settingsRes, debtsRes, bucketsRes, statementsRes]) {
+  for (const res of [settingsRes, debtsRes, bucketsRes, statementsRes, budgetItemsRes, paymentsRes]) {
     if (res.error) throw new Error(res.error.message);
   }
 
   const debtRows = (debtsRes.data ?? []) as DebtRow[];
   const bucketRows = (bucketsRes.data ?? []) as BucketRow[];
+  const budgetItemRows = (budgetItemsRes.data ?? []) as BudgetItemRow[];
+  const paymentRows = (paymentsRes.data ?? []) as PaymentRow[];
   const settingsRow = settingsRes.data as
     | { monthly_budget: string | number; start_date: string; strategy: string }
     | null;
@@ -144,6 +174,22 @@ export async function loadRemote(): Promise<AppState | null> {
         }
       : base.settings,
     statements: ((statementsRes.data ?? []) as { data: StatementRecord }[]).map((r) => r.data),
+    budgetItems: budgetItemRows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      amount: Number(r.amount),
+      type: r.type,
+      frequency: r.frequency,
+    })),
+    payments: paymentRows.map(
+      (r): PaymentLogEntry => ({
+        id: r.id,
+        debtId: r.debt_id ?? '',
+        amount: Number(r.amount),
+        date: r.date,
+        ...(r.note ? { note: r.note } : {}),
+      }),
+    ),
   };
 }
 
